@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VectorDraw - ベクタ画像クリエイター</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .checkerboard {
+            background-image:
+                linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+                linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+                linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-color: white;
+        }
+        .tool-btn.active {
+            background-color: #3b82f6; 
+            color: white;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col text-sm text-gray-800 overflow-hidden">
+    <header class="bg-white border-b px-4 py-3 flex justify-between items-center shrink-0 shadow-sm z-20">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <i data-lucide="pen-tool" class="text-blue-600"></i> VectorDraw
+        </h1>
+        <div class="flex items-center gap-3">
+            <select id="export-format" class="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="svg">SVG (ベクタ形式)</option>
+                <option value="png">PNG (透過画像)</option>
+                <option value="jpeg">JPEG (背景白)</option>
+            </select>
+            <button id="btn-export" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1 font-medium transition-colors" title="選択した形式で保存します">
+                <i data-lucide="download" class="w-4 h-4"></i> 保存
+            </button>
+            <div class="h-6 w-px bg-gray-300"></div>
+            <button id="btn-export-json" class="px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 flex items-center gap-1 transition-colors" title="再編集用のプロジェクトデータとして保存">
+                <i data-lucide="save" class="w-4 h-4"></i> プロジェクト保存
+            </button>
+            <label class="px-3 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 cursor-pointer flex items-center gap-1 transition-colors" title="保存したプロジェクトデータ(JSON)を開く">
+                <i data-lucide="folder-open" class="w-4 h-4"></i> 開く
+                <input type="file" id="input-import-json" class="hidden" accept=".json">
+            </label>
+        </div>
+    </header>
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="w-16 bg-white border-r flex flex-col items-center py-4 gap-3 shrink-0 shadow-sm z-10">
+            <button class="tool-btn active p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="select" title="選択・移動 (Select)">
+                <i data-lucide="mouse-pointer-2"></i>
+            </button>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="draw" title="フリーハンド・ペン (Draw)">
+                <i data-lucide="pen"></i>
+            </button>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="path-line" title="連続直線 (クリックで点追加、Enterで確定)">
+                <i data-lucide="route"></i>
+            </button>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="path-smooth" title="連続曲線 (クリックで点追加、Enterで確定)">
+                <i data-lucide="pen-tool"></i>
+            </button>
+            <div class="w-10 border-b border-gray-200 my-1"></div>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="rect" title="四角形を追加">
+                <i data-lucide="square"></i>
+            </button>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="circle" title="円を追加">
+                <i data-lucide="circle"></i>
+            </button>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="triangle" title="三角形を追加">
+                <i data-lucide="triangle"></i>
+            </button>
+            <button class="tool-btn p-3 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors" data-tool="line" title="直線を追加">
+                <i data-lucide="minus"></i>
+            </button>
+            <div class="w-10 border-b border-gray-200 my-1"></div>
+            <button id="btn-delete" class="p-3 rounded-xl text-red-500 hover:bg-red-50 hover:text-red-600 transition-colors mt-auto" title="選択した要素を削除 (Deleteキー)">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </aside>
+        <main class="flex-1 overflow-auto p-8 flex justify-center items-start bg-gray-200 relative">
+            <div id="path-hint" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded shadow-lg text-xs font-bold z-30 animate-pulse pointer-events-none">
+                クリックで点を追加 / 完了するには Enterキー を押すか始点をクリック
+            </div>
+            <div class="checkerboard shadow-xl border border-gray-300">
+                <canvas id="c" width="800" height="600"></canvas>
+            </div>
+        </main>
+        <aside class="w-72 bg-white border-l p-5 flex flex-col gap-6 shrink-0 overflow-y-auto shadow-sm z-10">
+            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-1">
+                    <i data-lucide="paintbrush-2" class="w-4 h-4"></i> 線の設定 (Stroke)
+                </h3>
+                <div class="flex items-center gap-2 mb-3">
+                    <input type="color" id="stroke-color" value="#000000" class="w-10 h-10 cursor-pointer rounded border border-gray-300 p-0.5">
+                    <button class="btn-eyedropper p-2 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 flex-1 flex justify-center items-center gap-1" data-target="stroke-color" title="画面から色を抽出します">
+                        <i data-lucide="pipette" class="w-4 h-4"></i> スポイト
+                    </button>
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between mb-1">
+                        <label class="text-xs text-gray-500">透過度 (Alpha)</label>
+                        <span id="stroke-opacity-val" class="text-xs font-mono">1.00</span>
+                    </div>
+                    <input type="range" id="stroke-opacity" min="0" max="1" step="0.05" value="1" class="w-full accent-blue-600">
+                </div>
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-xs text-gray-500">太さ (Width)</label>
+                        <span class="text-xs font-mono"><span id="stroke-width-val">3</span>px</span>
+                    </div>
+                    <input type="range" id="stroke-width" min="1" max="50" step="1" value="3" class="w-full accent-blue-600">
+                </div>
+            </div>
+            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-bold text-gray-700 flex items-center gap-1">
+                        <i data-lucide="paint-bucket" class="w-4 h-4"></i> 塗り設定 (Fill)
+                    </h3>
+                    <label class="flex items-center gap-1 text-xs cursor-pointer select-none bg-white px-2 py-1 border rounded shadow-sm hover:bg-gray-50">
+                        <input type="checkbox" id="fill-transparent" class="cursor-pointer rounded text-blue-600">
+                        なし
+                    </label>
+                </div>
+                <div class="flex items-center gap-2 mb-3">
+                    <input type="color" id="fill-color" value="#cbd5e1" class="w-10 h-10 cursor-pointer rounded border border-gray-300 p-0.5">
+                    <button class="btn-eyedropper p-2 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 flex-1 flex justify-center items-center gap-1" data-target="fill-color" title="画面から色を抽出します">
+                        <i data-lucide="pipette" class="w-4 h-4"></i> スポイト
+                    </button>
+                </div>
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-xs text-gray-500">透過度 (Alpha)</label>
+                        <span id="fill-opacity-val" class="text-xs font-mono">1.00</span>
+                    </div>
+                    <input type="range" id="fill-opacity" min="0" max="1" step="0.05" value="1" class="w-full accent-blue-600">
+                </div>
+            </div>
+            <div class="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <h3 class="font-bold text-blue-800 mb-3 flex items-center gap-1">
+                    <i data-lucide="image" class="w-4 h-4"></i> トレース用レイヤー
+                </h3>
+                <p class="text-xs text-blue-600 mb-2">下敷き画像を配置します（保存時には除外されます）</p>
+                <input type="file" id="trace-upload" accept="image/png, image/jpeg, image/webp" class="block w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 mb-3 cursor-pointer">
+                <div class="mb-3">
+                    <div class="flex justify-between mb-1">
+                        <label class="text-xs text-blue-700">画像の不透明度</label>
+                        <span id="trace-opacity-val" class="text-xs font-mono text-blue-800">0.50</span>
+                    </div>
+                    <input type="range" id="trace-opacity" min="0.05" max="1" step="0.05" value="0.5" class="w-full accent-blue-500">
+                </div>
+                <button id="btn-remove-trace" class="w-full text-xs py-1.5 bg-white border border-blue-200 text-red-500 rounded hover:bg-red-50 transition-colors flex justify-center items-center gap-1">
+                    <i data-lucide="x" class="w-3 h-3"></i> 画像を消去
+                </button>
+            </div>
+            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <h3 class="font-bold text-gray-700 mb-3 flex items-center gap-1">
+                    <i data-lucide="layers" class="w-4 h-4"></i> 要素の重なり順
+                </h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <button id="btn-bring-front" class="py-2 bg-white border rounded hover:bg-gray-100 flex justify-center items-center gap-1">
+                        <i data-lucide="arrow-up-to-line" class="w-3 h-3"></i> 最前面へ
+                    </button>
+                    <button id="btn-send-back" class="py-2 bg-white border rounded hover:bg-gray-100 flex justify-center items-center gap-1">
+                        <i data-lucide="arrow-down-to-line" class="w-3 h-3"></i> 最背面へ
+                    </button>
+                </div>
+            </div>
+        </aside>
+    </div>
+    <script>
+        lucide.createIcons();
+        const $ = id => document.getElementById(id);
+        const canvas = new fabric.Canvas('c', {
+            isDrawingMode: false,
+            preserveObjectStacking: true 
+        });
+        const state = {
+            tool: 'select',
+            strokeColor: '#000000',
+            strokeOpacity: 1,
+            strokeWidth: 3,
+            fillColor: '#cbd5e1',
+            fillOpacity: 1,
+            fillTransparent: false,
+            traceOpacity: 0.5
+        };
+        function hexToRgba(hex, alpha) {
+            if(hex === 'transparent') return 'transparent';
+            let r = 0, g = 0, b = 0;
+            if (hex.length === 4) {
+                r = parseInt(hex[1] + hex[1], 16);
+                g = parseInt(hex[2] + hex[2], 16);
+                b = parseInt(hex[3] + hex[3], 16);
+            } else if (hex.length === 7) {
+                r = parseInt(hex.substring(1, 3), 16);
+                g = parseInt(hex.substring(3, 5), 16);
+                b = parseInt(hex.substring(5, 7), 16);
+            }
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        function getStrokeColor() {
+            return hexToRgba(state.strokeColor, state.strokeOpacity);
+        }
+        function getFillColor() {
+            if (state.fillTransparent) return 'transparent';
+            return hexToRgba(state.fillColor, state.fillOpacity);
+        }
+        function updateBrush() {
+            if (canvas.freeDrawingBrush) {
+                canvas.freeDrawingBrush.color = getStrokeColor();
+                canvas.freeDrawingBrush.width = state.strokeWidth;
+            }
+        }
+        function updateSelectedObjects() {
+            const activeObjects = canvas.getActiveObjects();
+            if (activeObjects.length > 0) {
+                activeObjects.forEach(obj => {
+                    if (obj.type === 'path' || obj.type === 'line') {
+                        obj.set('stroke', getStrokeColor());
+                        obj.set('strokeWidth', state.strokeWidth);
+                        if(obj.type === 'path' && !state.fillTransparent) {
+                             obj.set('fill', getFillColor());
+                        } else if (obj.type === 'path') {
+                             obj.set('fill', 'transparent');
+                        }
+                    } else {
+                        obj.set('stroke', getStrokeColor());
+                        obj.set('strokeWidth', state.strokeWidth);
+                        obj.set('fill', getFillColor());
+                    }
+                });
+                canvas.renderAll();
+            }
+        }
+        $('stroke-color').addEventListener('input', (e) => { state.strokeColor = e.target.value; updateBrush(); updateSelectedObjects(); });
+        $('stroke-opacity').addEventListener('input', (e) => { state.strokeOpacity = parseFloat(e.target.value); $('stroke-opacity-val').textContent = state.strokeOpacity.toFixed(2); updateBrush(); updateSelectedObjects(); });
+        $('stroke-width').addEventListener('input', (e) => { state.strokeWidth = parseInt(e.target.value); $('stroke-width-val').textContent = state.strokeWidth; updateBrush(); updateSelectedObjects(); });
+        $('fill-color').addEventListener('input', (e) => { state.fillColor = e.target.value; updateSelectedObjects(); });
+        $('fill-opacity').addEventListener('input', (e) => { state.fillOpacity = parseFloat(e.target.value); $('fill-opacity-val').textContent = state.fillOpacity.toFixed(2); updateSelectedObjects(); });
+        $('fill-transparent').addEventListener('change', (e) => { 
+            state.fillTransparent = e.target.checked; 
+            $('fill-color').disabled = state.fillTransparent; 
+            $('fill-opacity').disabled = state.fillTransparent; 
+            $('fill-color').style.opacity = state.fillTransparent ? 0.3 : 1;
+            $('fill-opacity').style.opacity = state.fillTransparent ? 0.3 : 1;
+            updateSelectedObjects(); 
+        });
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                finishPathDrawing(true); 
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const tool = btn.dataset.tool;
+                state.tool = tool;
+                if (tool === 'path-line' || tool === 'path-smooth') {
+                    $('path-hint').classList.remove('hidden');
+                } else {
+                    $('path-hint').classList.add('hidden');
+                }
+                if (tool === 'select') {
+                    canvas.isDrawingMode = false;
+                } else if (tool === 'draw') {
+                    canvas.isDrawingMode = true;
+                    updateBrush();
+                    canvas.discardActiveObject(); 
+                    canvas.renderAll();
+                } else if (tool === 'path-line' || tool === 'path-smooth') {
+                    canvas.isDrawingMode = false;
+                    canvas.discardActiveObject();
+                    canvas.renderAll();
+                } else {
+                    canvas.isDrawingMode = false;
+                    addShape(tool);
+                    document.querySelector('[data-tool="select"]').click();
+                }
+            });
+        });
+        function addShape(type) {
+            let shape;
+            const center = canvas.getCenter();
+            const options = {
+                left: center.left,
+                top: center.top,
+                fill: getFillColor(),
+                stroke: getStrokeColor(),
+                strokeWidth: state.strokeWidth,
+                originX: 'center',
+                originY: 'center',
+                transparentCorners: false,
+                cornerColor: 'blue',
+                cornerStrokeColor: 'white',
+                borderColor: 'blue',
+                cornerSize: 10,
+                padding: 5
+            };
+            if (type === 'rect') {
+                shape = new fabric.Rect({ ...options, width: 150, height: 100 });
+            } else if (type === 'circle') {
+                shape = new fabric.Circle({ ...options, radius: 75 });
+            } else if (type === 'triangle') {
+                shape = new fabric.Triangle({ ...options, width: 120, height: 120 });
+            } else if (type === 'line') {
+                shape = new fabric.Line([center.left - 100, center.top, center.left + 100, center.top], {
+                    fill: getStrokeColor(),
+                    stroke: getStrokeColor(),
+                    strokeWidth: state.strokeWidth,
+                    transparentCorners: false,
+                    cornerColor: 'blue',
+                    cornerStrokeColor: 'white',
+                    borderColor: 'blue',
+                    cornerSize: 10,
+                    padding: 5
+                });
+            }
+            if (shape) {
+                canvas.add(shape);
+                canvas.setActiveObject(shape);
+            }
+        }
+        canvas.on('selection:created', updatePropsFromSelection);
+        canvas.on('selection:updated', updatePropsFromSelection);
+        function updatePropsFromSelection() {
+            const activeObjects = canvas.getActiveObjects();
+            if (activeObjects.length !== 1) return; 
+            const obj = activeObjects[0];
+            try {
+                if (obj.stroke && typeof obj.stroke === 'string') {
+                    const strokeColor = new fabric.Color(obj.stroke);
+                    $('stroke-color').value = '#' + strokeColor.toHex();
+                    state.strokeColor = $('stroke-color').value;
+                    const alpha = strokeColor.getAlpha();
+                    $('stroke-opacity').value = alpha;
+                    $('stroke-opacity-val').textContent = alpha.toFixed(2);
+                    state.strokeOpacity = alpha;
+                }
+                if (obj.strokeWidth !== undefined) {
+                    $('stroke-width').value = obj.strokeWidth;
+                    $('stroke-width-val').textContent = obj.strokeWidth;
+                    state.strokeWidth = obj.strokeWidth;
+                }
+                if (obj.fill && typeof obj.fill === 'string' && obj.fill !== 'transparent') {
+                    const fillColor = new fabric.Color(obj.fill);
+                    $('fill-color').value = '#' + fillColor.toHex();
+                    state.fillColor = $('fill-color').value;
+                    const alpha = fillColor.getAlpha();
+                    $('fill-opacity').value = alpha;
+                    $('fill-opacity-val').textContent = alpha.toFixed(2);
+                    state.fillOpacity = alpha;
+                    $('fill-transparent').checked = false;
+                    state.fillTransparent = false;
+                } else if (obj.fill === 'transparent' || !obj.fill) {
+                    $('fill-transparent').checked = true;
+                    state.fillTransparent = true;
+                }
+                $('fill-color').disabled = state.fillTransparent;
+                $('fill-opacity').disabled = state.fillTransparent;
+                $('fill-color').style.opacity = state.fillTransparent ? 0.3 : 1;
+                $('fill-opacity').style.opacity = state.fillTransparent ? 0.3 : 1;
+            } catch (e) {
+                console.warn("色情報の解析をスキップしました(グラデーション等)", e);
+            }
+            updateBrush(); 
+        }
+        let pathPoints = [];
+        let pathPreview = null;
+        function resetPathDrawing() {
+            pathPoints = [];
+            if (pathPreview) {
+                canvas.remove(pathPreview);
+                pathPreview = null;
+            }
+            canvas.renderAll();
+        }
+        function generateLinePath(points) {
+            if (points.length < 2) return '';
+            let p = `M ${points[0].x} ${points[0].y} `;
+            for (let i = 1; i < points.length; i++) {
+                p += `L ${points[i].x} ${points[i].y} `;
+            }
+            return p;
+        }
+        function generateSmoothPath(points) {
+            if (points.length < 2) return '';
+            let p = `M ${points[0].x} ${points[0].y} `;
+            for (let i = 1; i < points.length - 1; i++) {
+                let xc = (points[i].x + points[i + 1].x) / 2;
+                let yc = (points[i].y + points[i + 1].y) / 2;
+                p += `Q ${points[i].x} ${points[i].y}, ${xc} ${yc} `;
+            }
+            let last = points[points.length - 1];
+            p += `L ${last.x} ${last.y}`;
+            return p;
+        }
+        function updatePathPreview(currentPointer) {
+            if (pathPoints.length === 0) return;
+            let tempPoints = [...pathPoints];
+            if (currentPointer) tempPoints.push(currentPointer);
+            let pathStr = '';
+            if (state.tool === 'path-line') pathStr = generateLinePath(tempPoints);
+            else if (state.tool === 'path-smooth') pathStr = generateSmoothPath(tempPoints);
+            if (pathPreview) canvas.remove(pathPreview);
+            pathPreview = new fabric.Path(pathStr, {
+                fill: state.fillTransparent ? 'transparent' : getFillColor(),
+                stroke: getStrokeColor(),
+                strokeWidth: state.strokeWidth,
+                strokeDashArray: currentPointer ? [5, 5] : null, 
+                selectable: false,
+                evented: false
+            });
+            canvas.add(pathPreview);
+            canvas.renderAll();
+        }
+        function finishPathDrawing(cancel = false) {
+            if (cancel || pathPoints.length < 2) {
+                resetPathDrawing();
+                return;
+            }
+            let pathStr = '';
+            if (state.tool === 'path-line') pathStr = generateLinePath(pathPoints);
+            else if (state.tool === 'path-smooth') pathStr = generateSmoothPath(pathPoints);
+            const finalPath = new fabric.Path(pathStr, {
+                fill: state.fillTransparent ? 'transparent' : getFillColor(),
+                stroke: getStrokeColor(),
+                strokeWidth: state.strokeWidth,
+                transparentCorners: false,
+                cornerColor: 'blue',
+                cornerStrokeColor: 'white',
+                borderColor: 'blue',
+                cornerSize: 10,
+                padding: 5
+            });
+            resetPathDrawing();
+            canvas.add(finalPath);
+            document.querySelector('[data-tool="select"]').click(); 
+            canvas.setActiveObject(finalPath);
+        }
+        canvas.on('mouse:down', function(o) {
+            if (state.tool !== 'path-line' && state.tool !== 'path-smooth') return;
+            let pointer = canvas.getPointer(o.e);
+            if (pathPoints.length > 2) {
+                const startPoint = pathPoints[0];
+                const distance = Math.hypot(pointer.x - startPoint.x, pointer.y - startPoint.y);
+                if (distance < 15) { 
+                    pathPoints.push({x: startPoint.x, y: startPoint.y});
+                    finishPathDrawing();
+                    return;
+                }
+            }
+            pathPoints.push({x: pointer.x, y: pointer.y});
+            updatePathPreview(null);
+        });
+        canvas.on('mouse:move', function(o) {
+            if ((state.tool !== 'path-line' && state.tool !== 'path-smooth') || pathPoints.length === 0) return;
+            let pointer = canvas.getPointer(o.e);
+            updatePathPreview(pointer);
+        });
+        function deleteSelected() {
+            canvas.getActiveObjects().forEach(obj => canvas.remove(obj));
+            canvas.discardActiveObject();
+        }
+        $('btn-delete').addEventListener('click', deleteSelected);
+        document.addEventListener('keydown', (e) => {
+            if (state.tool === 'path-line' || state.tool === 'path-smooth') {
+                if (e.key === 'Enter') {
+                    finishPathDrawing();
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    finishPathDrawing(true); 
+                    return;
+                }
+            }
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                    deleteSelected();
+                }
+            }
+        });
+        $('btn-bring-front').addEventListener('click', () => {
+            const activeObj = canvas.getActiveObject();
+            if(activeObj) {
+                canvas.bringToFront(activeObj);
+                canvas.renderAll();
+            }
+        });
+        $('btn-send-back').addEventListener('click', () => {
+            const activeObj = canvas.getActiveObject();
+            if(activeObj) {
+                canvas.sendToBack(activeObj);
+                canvas.renderAll();
+            }
+        });
+        document.querySelectorAll('.btn-eyedropper').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if ('EyeDropper' in window) {
+                    const eyeDropper = new EyeDropper();
+                    try {
+                        const result = await eyeDropper.open();
+                        const targetId = btn.dataset.target;
+                        const input = $(targetId);
+                        input.value = result.sRGBHex;
+                        input.dispatchEvent(new Event('input')); 
+                    } catch (e) {
+                        console.log('スポイトがキャンセルされました');
+                    }
+                } else {
+                    alert('お使いのブラウザはスポイト機能(EyeDropper API)をサポートしていません。\nカラーピッカーを開き、中にあるスポイトアイコンをご利用ください。');
+                }
+            });
+        });
+        $('trace-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (f) => {
+                const data = f.target.result;
+                fabric.Image.fromURL(data, (img) => {
+                    const scale = Math.min((canvas.width * 0.8) / img.width, (canvas.height * 0.8) / img.height);
+                    img.set({
+                        originX: 'center',
+                        originY: 'center',
+                        left: canvas.width / 2,
+                        top: canvas.height / 2,
+                        scaleX: scale,
+                        scaleY: scale,
+                        opacity: state.traceOpacity
+                    });
+                    canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas));
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+        $('trace-opacity').addEventListener('input', (e) => {
+            state.traceOpacity = parseFloat(e.target.value);
+            $('trace-opacity-val').textContent = state.traceOpacity.toFixed(2);
+            if (canvas.backgroundImage) {
+                canvas.backgroundImage.opacity = state.traceOpacity;
+                canvas.renderAll();
+            }
+        });
+        $('btn-remove-trace').addEventListener('click', () => {
+            canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
+            $('trace-upload').value = '';
+        });
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        $('btn-export').addEventListener('click', () => {
+            const format = $('export-format').value;
+            const bgImage = canvas.backgroundImage;
+            canvas.setBackgroundImage(null, () => {
+                if (format === 'svg') {
+                    const svgStr = canvas.toSVG();
+                    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+                    downloadBlob(blob, 'vector_drawing.svg');
+                } else if (format === 'png') {
+                    const dataURL = canvas.toDataURL({ format: 'png', multiplier: 1 });
+                    const link = document.createElement('a');
+                    link.download = 'drawing.png';
+                    link.href = dataURL;
+                    link.click();
+                } else if (format === 'jpeg') {
+                    const prevBgColor = canvas.backgroundColor;
+                    canvas.backgroundColor = '#ffffff';
+                    canvas.renderAll();
+                    const dataURL = canvas.toDataURL({ format: 'jpeg', quality: 0.9, multiplier: 1 });
+                    const link = document.createElement('a');
+                    link.download = 'drawing.jpg';
+                    link.href = dataURL;
+                    link.click();
+                    canvas.backgroundColor = prevBgColor;
+                }
+                canvas.setBackgroundImage(bgImage, canvas.renderAll.bind(canvas));
+            });
+        });
+        $('btn-export-json').addEventListener('click', () => {
+            const jsonStr = JSON.stringify(canvas.toJSON(['backgroundImage']));
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            downloadBlob(blob, 'vector_project.json');
+        });
+        $('input-import-json').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (f) => {
+                canvas.loadFromJSON(f.target.result, () => {
+                    canvas.renderAll();
+                    if (canvas.backgroundImage) {
+                        $('trace-opacity').value = canvas.backgroundImage.opacity;
+                        $('trace-opacity-val').textContent = canvas.backgroundImage.opacity.toFixed(2);
+                        state.traceOpacity = canvas.backgroundImage.opacity;
+                    }
+                });
+            };
+            reader.readAsText(file);
+            e.target.value = ''; 
+        });
+        updateBrush();
+    </script>
+</body>
+</html>
