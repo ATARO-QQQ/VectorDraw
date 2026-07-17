@@ -59,6 +59,7 @@
                             <option value="logo">ロゴ / アイコン (おすすめ)</option>
                             <option value="illustration">イラスト / アニメ絵</option>
                             <option value="smooth">超なめらか (曲線優先)</option>
+                            <option value="faithful">忠実な色再現 (高精度)</option>
                             <option value="silhouette">白黒シルエット</option>
                             <option value="custom">カスタム</option>
                         </select>
@@ -73,10 +74,18 @@
                     </div>
                     <div>
                         <div class="flex justify-between items-center mb-1">
-                            <label class="block text-sm font-medium text-gray-700">使用する色数</label>
-                            <span id="colorsVal" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">16色</span>
+                            <label class="block text-sm font-medium text-gray-700">グニャグニャ補正</label>
+                            <span id="blurVal" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">2</span>
                         </div>
-                        <input type="range" id="colors" min="2" max="64" step="1" value="16" class="w-full">
+                        <input type="range" id="blur" min="0" max="10" step="0.5" value="2" class="w-full">
+                        <p class="text-xs text-gray-500 mt-1">ピクセルの角を取り、直線を減らして「円や楕円」のような丸みを帯びた曲線に近づけます。</p>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-sm font-medium text-gray-700">使用する色数</label>
+                            <span id="colorsVal" class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">64色</span>
+                        </div>
+                        <input type="range" id="colors" min="2" max="256" step="1" value="64" class="w-full">
                     </div>
                     <div>
                         <div class="flex justify-between items-center mb-1">
@@ -148,10 +157,11 @@
         const loadingOverlay = document.getElementById('loadingOverlay');
         const presetSelect = document.getElementById('presetSelect');
         const presets = {
-            logo: { smoothness: 1.5, colors: 8, noise: 4 },
-            illustration: { smoothness: 1.0, colors: 16, noise: 8 },
-            smooth: { smoothness: 3.0, colors: 12, noise: 12 },
-            silhouette: { smoothness: 1.5, colors: 2, noise: 8 }
+            logo: { smoothness: 1.5, blur: 1, colors: 16, noise: 4 },
+            illustration: { smoothness: 1.0, blur: 2, colors: 64, noise: 8 },
+            smooth: { smoothness: 3.0, blur: 4, colors: 64, noise: 12 },
+            faithful: { smoothness: 1.0, blur: 1, colors: 256, noise: 2 },
+            silhouette: { smoothness: 1.5, blur: 0, colors: 2, noise: 8 }
         };
         dropZone.addEventListener('click', () => fileInput.click());
         dropZone.addEventListener('dragover', (e) => {
@@ -183,6 +193,7 @@
             });
         };
         updateSliderVal('smoothness');
+        updateSliderVal('blur');
         updateSliderVal('colors', '色');
         updateSliderVal('noise');
         presetSelect.addEventListener('change', (e) => {
@@ -191,6 +202,8 @@
                 const p = presets[val];
                 document.getElementById('smoothness').value = p.smoothness;
                 document.getElementById('smoothnessVal').textContent = p.smoothness;
+                document.getElementById('blur').value = p.blur;
+                document.getElementById('blurVal').textContent = p.blur;
                 document.getElementById('colors').value = p.colors;
                 document.getElementById('colorsVal').textContent = p.colors + '色';
                 document.getElementById('noise').value = p.noise;
@@ -251,6 +264,7 @@
             convertBtn.disabled = true;
             svgContainer.innerHTML = '';
             const smoothness = parseFloat(document.getElementById('smoothness').value);
+            const blurValue = parseFloat(document.getElementById('blur').value);
             const colors = parseInt(document.getElementById('colors').value);
             const noise = parseInt(document.getElementById('noise').value);
             const options = {
@@ -258,8 +272,12 @@
                 qtres: smoothness,       
                 pathomit: noise,         
                 numberofcolors: colors,  
+                colorquantcycles: 5,     
+                blurradius: blurValue,   
+                blurdelta: 20,
                 strokewidth: 0,          
                 linefilter: true,
+                rightangleenhance: false, 
                 scale: 1,
                 roundcoords: 1,          
                 viewbox: true,           
