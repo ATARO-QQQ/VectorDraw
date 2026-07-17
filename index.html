@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VectorSmooth - 滑らかSVGコンバーター</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/imagetracerjs/1.2.6/imagetracer_v1.2.6.min.js"></script>
+    <script src="https://unpkg.com/imagetracerjs@1.2.6/imagetracer_v1.2.6.js"></script>
     <style>
         .checkerboard {
             background-color: #ffffff;
@@ -134,6 +134,7 @@
     </footer>
     <script>
         let currentImageDataUrl = null;
+        let currentImageData = null; 
         let currentSvgString = null;
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -225,6 +226,7 @@
                     ctx.fillRect(0, 0, width, height);
                     ctx.drawImage(img, 0, 0, width, height);
                     currentImageDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                    currentImageData = ctx.getImageData(0, 0, width, height); 
                     uploadPreview.src = currentImageDataUrl;
                     uploadPreview.classList.remove('hidden');
                     dropZoneContent.classList.add('hidden');
@@ -241,7 +243,7 @@
             reader.readAsDataURL(file);
         }
         convertBtn.addEventListener('click', () => {
-            if (!currentImageDataUrl) {
+            if (!currentImageDataUrl || !currentImageData) {
                 alert('先に画像を読み込んでください。');
                 return;
             }
@@ -265,22 +267,21 @@
             };
             setTimeout(() => {
                 try {
-                    ImageTracer.imageToSVG(currentImageDataUrl, (svgStr) => {
-                        let finalSvgStr = svgStr;
-                        if (!finalSvgStr.includes('viewBox')) {
-                            finalSvgStr = finalSvgStr.replace(/<svg/, '<svg style="width:100%; height:100%; max-height:400px;"');
-                        } else {
-                            finalSvgStr = finalSvgStr.replace(/<svg/, '<svg style="width:100%; height:100%; max-height:400px; object-fit:contain;"');
-                        }
-                        currentSvgString = finalSvgStr;
-                        svgContainer.innerHTML = finalSvgStr;
-                        loadingOverlay.classList.add('hidden');
-                        convertBtn.disabled = false;
-                        downloadBtn.disabled = false;
-                    }, options);
+                    const svgStr = ImageTracer.imagedataToSVG(currentImageData, options);
+                    let finalSvgStr = svgStr;
+                    if (!finalSvgStr.includes('viewBox')) {
+                        finalSvgStr = finalSvgStr.replace(/<svg/, '<svg style="width:100%; height:100%; max-height:400px;"');
+                    } else {
+                        finalSvgStr = finalSvgStr.replace(/<svg/, '<svg style="width:100%; height:100%; max-height:400px; object-fit:contain;"');
+                    }
+                    currentSvgString = finalSvgStr;
+                    svgContainer.innerHTML = finalSvgStr;
+                    loadingOverlay.classList.add('hidden');
+                    convertBtn.disabled = false;
+                    downloadBtn.disabled = false;
                 } catch (error) {
                     console.error("変換エラー:", error);
-                    alert("変換中にエラーが発生しました。画像が複雑すぎる可能性があります。");
+                    alert("変換中にエラーが発生しました。画像が複雑すぎるか、ライブラリの読み込みに失敗しました。");
                     loadingOverlay.classList.add('hidden');
                     convertBtn.disabled = false;
                 }
